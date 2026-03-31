@@ -12,8 +12,22 @@ import sys
 import subprocess
 import tempfile
 import shutil
+import time
+import uuid
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any, Callable
+from dataclasses import dataclass
+from enum import Enum
+import concurrent.futures
+
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+    # 回退：简单的进度显示
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
 
 try:
     from piano_transcription_inference import PianoTranscription, load_audio, sample_rate
@@ -25,6 +39,65 @@ except ImportError:
     sample_rate = None
 
 SUPPORTED_AUDIO_EXTS = ['.mp3', '.wav', '.flac', '.ogg', '.aac', '.m4a', '.wma']
+
+
+class ProcessingStatus(Enum):
+    """处理状态枚举"""
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+@dataclass
+class ProcessingOptions:
+    """处理选项数据类"""
+    output_dir: str
+    musescore_path: str = "musescore3"
+    use_gpu: bool = False
+    keep_midi: bool = True
+    midi_only: bool = False
+    pdf_only: bool = False
+
+
+@dataclass
+class FileResult:
+    """单个文件处理结果"""
+    input_file: str
+    status: ProcessingStatus
+    midi_path: Optional[str] = None
+    pdf_path: Optional[str] = None
+    error: Optional[str] = None
+    processing_time: float = 0.0
+    
+    @property
+    def success(self) -> bool:
+        return self.status == ProcessingStatus.SUCCESS
+
+
+@dataclass
+class BatchResult:
+    """批量处理结果"""
+    total_files: int
+    successful: int
+    failed: int
+    skipped: int
+    results: List[FileResult]
+    total_time: float
+    
+    @property
+    def success_rate(self) -> float:
+        return self.successful / self.total_files if self.total_files > 0 else 0.0
+
+
+def calculate_optimal_workers(use_gpu: bool, file_count: int) -> int:
+    """计算最优工作进程数"""
+    if use_gpu:
+        # GPU模式：限制为1，避免显存竞争
+        return 1
+    else:
+        # CPU模式：使用CPU核心数，但不超过文件数，也不超过8（避免资源耗尽）
+        cpu_count = os.cpu_count() or 4
+        return min(cpu_count, file_count, 8)
 
 def check_musescore(musescore_path: str) -> bool:
     try:
@@ -135,13 +208,232 @@ def process_single_file(input_file: str,
     print(f"跳过不支持的文件格式: {input_file}")
     return False, None
 
+
+def process_file_parallel(input_file: str, options: ProcessingOptions) -> FileResult:
+    """并行处理单个文件（在子进程中运行）"""
+    start_time = time.time()
+    input_file = os.path.abspath(input_file)
+    output_dir = os.path.abspath(options.output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 生成唯一的临时文件名
+    temp_id = str(uuid.uuid4())[:8]
+    
+    try:
+        ext = os.path.splitext(input_file)[1].lower()
+        
+        # 检查文件是否存在
+        if not os.path.exists(input_file):
+            return FileResult(
+                input_file=input_file,
+                status=ProcessingStatus.FAILED,
+                error=f"文件不存在: {input_file}",
+                processing_time=time.time() - start_time
+            )
+        
+        # PDF-only模式
+        if options.pdf_only:
+            if ext not in ['.mid', '.midi']:
+                return FileResult(
+                    input_file=input_file,
+                    status=ProcessingStatus.FAILED,
+                    error=f"--pdf-only 模式下，输入文件必须是 MIDI 文件，但得到: {input_file}",
+                    processing_time=time.time() - start_time
+                )
+            pdf_path = get_output_path(input_file, output_dir, '.pdf')
+            success = convert_midi_to_pdf(input_file, pdf_path, options.musescore_path)
+            return FileResult(
+                input_file=input_file,
+                status=ProcessingStatus.SUCCESS if success else ProcessingStatus.FAILED,
+                pdf_path=pdf_path if success else None,
+                processing_time=time.time() - start_time
+            )
+        
+        # MIDI文件处理
+        if ext in ['.mid', '.midi']:
+            pdf_path = get_output_path(input_file, output_dir, '.pdf')
+            success = convert_midi_to_pdf(input_file, pdf_path, options.musescore_path)
+            return FileResult(
+                input_file=input_file,
+                status=ProcessingStatus.SUCCESS if success else ProcessingStatus.FAILED,
+                pdf_path=pdf_path if success else None,
+                processing_time=time.time() - start_time
+            )
+        
+        # 音频文件处理
+        if ext in SUPPORTED_AUDIO_EXTS:
+            midi_path = get_output_path(input_file, output_dir, f'.{temp_id}.mid')
+            success_midi = convert_mp3_to_midi(input_file, midi_path, options.use_gpu)
+            if not success_midi:
+                return FileResult(
+                    input_file=input_file,
+                    status=ProcessingStatus.FAILED,
+                    error="音频转MIDI失败",
+                    processing_time=time.time() - start_time
+                )
+            
+            # 如果只生成MIDI
+            if options.midi_only:
+                final_midi_path = get_output_path(input_file, output_dir, '.mid')
+                shutil.move(midi_path, final_midi_path)
+                return FileResult(
+                    input_file=input_file,
+                    status=ProcessingStatus.SUCCESS,
+                    midi_path=final_midi_path,
+                    processing_time=time.time() - start_time
+                )
+            
+            # MIDI转PDF
+            pdf_path = get_output_path(input_file, output_dir, '.pdf')
+            success_pdf = convert_midi_to_pdf(midi_path, pdf_path, options.musescore_path)
+            
+            # 清理临时MIDI文件
+            if not options.keep_midi and success_pdf:
+                try:
+                    os.remove(midi_path)
+                except OSError:
+                    pass
+            
+            return FileResult(
+                input_file=input_file,
+                status=ProcessingStatus.SUCCESS if success_pdf else ProcessingStatus.FAILED,
+                midi_path=midi_path if options.keep_midi else None,
+                pdf_path=pdf_path if success_pdf else None,
+                processing_time=time.time() - start_time
+            )
+        
+        # 不支持的文件格式
+        return FileResult(
+            input_file=input_file,
+            status=ProcessingStatus.SKIPPED,
+            error=f"跳过不支持的文件格式: {input_file}",
+            processing_time=time.time() - start_time
+        )
+        
+    except Exception as e:
+        return FileResult(
+            input_file=input_file,
+            status=ProcessingStatus.FAILED,
+            error=f"处理异常: {str(e)}",
+            processing_time=time.time() - start_time
+        )
+
+
+def batch_process_parallel(
+    files: List[str],
+    options: ProcessingOptions,
+    max_workers: Optional[int] = None,
+    verbose: bool = False
+) -> BatchResult:
+    """批量并行处理文件"""
+    start_time = time.time()
+    
+    if not files:
+        return BatchResult(
+            total_files=0,
+            successful=0,
+            failed=0,
+            skipped=0,
+            results=[],
+            total_time=0.0
+        )
+    
+    # 计算工作进程数
+    if max_workers is None:
+        max_workers = calculate_optimal_workers(options.use_gpu, len(files))
+    
+    # 确保至少1个工作进程
+    max_workers = max(1, min(max_workers, len(files)))
+    
+    if verbose:
+        print(f"开始并行处理 {len(files)} 个文件，使用 {max_workers} 个工作进程")
+    
+    results: List[FileResult] = []
+    
+    # 使用ProcessPoolExecutor进行并行处理
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        # 提交所有任务
+        future_to_file = {
+            executor.submit(process_file_parallel, file, options): file
+            for file in files
+        }
+        
+        # 收集结果（带进度条）
+        if TQDM_AVAILABLE:
+            # 使用tqdm进度条
+            futures = tqdm(
+                concurrent.futures.as_completed(future_to_file),
+                total=len(files),
+                desc="处理进度",
+                unit="文件"
+            )
+        else:
+            # 简单进度显示
+            futures = concurrent.futures.as_completed(future_to_file)
+            print(f"处理进度: 0/{len(files)}", end="", flush=True)
+        
+        completed = 0
+        for future in futures:
+            file = future_to_file[future]
+            try:
+                result = future.result()
+                results.append(result)
+                
+                # 更新进度
+                completed += 1
+                if not TQDM_AVAILABLE:
+                    print(f"\r处理进度: {completed}/{len(files)}", end="", flush=True)
+                
+                # 详细输出
+                if verbose and TQDM_AVAILABLE:
+                    if result.success:
+                        tqdm.write(f"✓ {os.path.basename(file)}")
+                    elif result.status == ProcessingStatus.SKIPPED:
+                        tqdm.write(f"⊘ {os.path.basename(file)}: {result.error}")
+                    else:
+                        tqdm.write(f"✗ {os.path.basename(file)}: {result.error}")
+                        
+            except Exception as e:
+                # 捕获任务执行异常
+                results.append(FileResult(
+                    input_file=file,
+                    status=ProcessingStatus.FAILED,
+                    error=f"任务执行异常: {str(e)}",
+                    processing_time=0.0
+                ))
+                completed += 1
+                if not TQDM_AVAILABLE:
+                    print(f"\r处理进度: {completed}/{len(files)}", end="", flush=True)
+    
+    if not TQDM_AVAILABLE:
+        print()  # 换行
+    
+    # 统计结果
+    successful = sum(1 for r in results if r.success)
+    failed = sum(1 for r in results if r.status == ProcessingStatus.FAILED)
+    skipped = sum(1 for r in results if r.status == ProcessingStatus.SKIPPED)
+    
+    total_time = time.time() - start_time
+    
+    return BatchResult(
+        total_files=len(files),
+        successful=successful,
+        failed=failed,
+        skipped=skipped,
+        results=results,
+        total_time=total_time
+    )
+
+
 def batch_process(input_path: str,
                   output_dir: str,
                   musescore_path: str,
                   use_gpu: bool,
                   keep_midi: bool,
                   midi_only: bool,
-                  pdf_only: bool) -> None:
+                  pdf_only: bool,
+                  parallel: bool = True,
+                  workers: Optional[int] = None) -> None:
     input_path = os.path.abspath(input_path)
 
     if os.path.isdir(input_path):
@@ -157,16 +449,40 @@ def batch_process(input_path: str,
             return
 
         print(f"找到 {len(files_to_process)} 个文件待处理。")
-        success_count = 0
-        for i, file in enumerate(files_to_process, 1):
-            print(f"\n[{i}/{len(files_to_process)}] 处理: {file}")
-            success, _ = process_single_file(
-                file, output_dir, musescore_path, use_gpu, keep_midi, midi_only, pdf_only
+        
+        if parallel:
+            # 并行处理
+            options = ProcessingOptions(
+                output_dir=output_dir,
+                musescore_path=musescore_path,
+                use_gpu=use_gpu,
+                keep_midi=keep_midi,
+                midi_only=midi_only,
+                pdf_only=pdf_only
             )
-            if success:
-                success_count += 1
+            result = batch_process_parallel(
+                files=files_to_process,
+                options=options,
+                max_workers=workers,
+                verbose=True
+            )
+            print(f"\n批量处理完成: {result.successful}/{result.total_files} 个文件成功。")
+            if result.failed > 0:
+                print(f"失败: {result.failed} 个文件")
+            if result.skipped > 0:
+                print(f"跳过: {result.skipped} 个文件")
+        else:
+            # 串行处理（原有逻辑）
+            success_count = 0
+            for i, file in enumerate(files_to_process, 1):
+                print(f"\n[{i}/{len(files_to_process)}] 处理: {file}")
+                success, _ = process_single_file(
+                    file, output_dir, musescore_path, use_gpu, keep_midi, midi_only, pdf_only
+                )
+                if success:
+                    success_count += 1
 
-        print(f"\n批量处理完成: {success_count}/{len(files_to_process)} 个文件成功。")
+            print(f"\n批量处理完成: {success_count}/{len(files_to_process)} 个文件成功。")
 
     elif os.path.isfile(input_path):
         print(f"处理单个文件: {input_path}")
@@ -215,6 +531,12 @@ def main() -> None:
                         help="只生成 MIDI 文件，不转换为 PDF")
     parser.add_argument("--pdf-only", action="store_true",
                         help="假设输入是 MIDI 文件，直接转换为 PDF（跳过 MP3 转 MIDI）")
+    parser.add_argument("--parallel", action="store_true", default=True,
+                        help="启用并行处理（默认启用）")
+    parser.add_argument("--no-parallel", action="store_false", dest="parallel",
+                        help="禁用并行处理，使用串行处理")
+    parser.add_argument("--workers", type=int, default=None,
+                        help="并行处理的工作进程数（默认自动计算）")
 
     args = parser.parse_args()
 
@@ -238,7 +560,9 @@ def main() -> None:
         use_gpu=args.use_gpu,
         keep_midi=args.keep_midi,
         midi_only=args.midi_only,
-        pdf_only=args.pdf_only
+        pdf_only=args.pdf_only,
+        parallel=args.parallel,
+        workers=args.workers
     )
 
 if __name__ == "__main__":

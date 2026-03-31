@@ -10,6 +10,7 @@
   - 音频 → MIDI → PDF（通过 AI 转谱）
   - MIDI → PDF（直接转换）
 - **灵活选项**：GPU 加速、输出目录、中间文件保留等
+- **并行处理**：批量处理时自动并行化，支持自定义工作进程数
 - **用户友好**：清晰的进度提示和错误处理
 
 ## 系统要求
@@ -84,6 +85,11 @@ python3 scoreforge.py input.wav --no-keep-midi
 
 # 自定义 MuseScore 路径
 python3 scoreforge.py input.mid --musescore-path /usr/bin/musescore3
+
+# 并行处理选项（默认启用）
+python3 scoreforge.py /path/to/music_folder/ --parallel          # 启用并行处理（默认）
+python3 scoreforge.py /path/to/music_folder/ --no-parallel       # 禁用并行处理，使用串行
+python3 scoreforge.py /path/to/music_folder/ --workers 4         # 指定工作进程数（默认自动）
 ```
 
 ## 示例
