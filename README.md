@@ -68,7 +68,16 @@ brew install musescore
 
 ### 2. 安装 Python 依赖
 
+**方式一：使用安装脚本（推荐）**
 ```bash
+chmod +x install.sh
+./install.sh
+```
+
+**方式二：手动安装**
+```bash
+python3 -m venv piano-trans
+source piano-trans/bin/activate
 pip install -r requirements.txt
 ```
 
