@@ -1,5 +1,7 @@
 # ScoreForge
 
+![ScoreForge - 钢琴音频转乐谱工具](images/readme-banner.png)
+
 将钢琴音频或 MIDI 文件转换为 PDF 乐谱的命令行工具。支持单个文件或批量转换。
 
 ## 功能特性
