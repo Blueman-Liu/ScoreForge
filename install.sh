@@ -57,7 +57,7 @@ check_python() {
 }
 
 setup_venv() {
-    VENV_DIR="piano-trans"
+    VENV_DIR="score-forge-venv"
     
     if [[ -d "$VENV_DIR" ]]; then
         warn "虚拟环境已存在: $VENV_DIR"
@@ -78,7 +78,7 @@ setup_venv() {
 install_python_deps() {
     info "安装 Python 依赖..."
     
-    source piano-trans/bin/activate
+    source score-forge-venv/bin/activate
     pip install --upgrade pip -q
     
     if [[ -f "requirements.txt" ]]; then
@@ -136,7 +136,7 @@ print_usage() {
     echo "使用方式："
     echo ""
     echo "  1. 激活虚拟环境："
-    echo "     source piano-trans/bin/activate"
+    echo "     source score-forge-venv/bin/activate"
     echo ""
     echo "  2. 命令行使用："
     echo "     python scoreforge.py input.wav"

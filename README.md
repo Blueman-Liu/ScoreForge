@@ -76,8 +76,8 @@ chmod +x install.sh
 
 **方式二：手动安装**
 ```bash
-python3 -m venv piano-trans
-source piano-trans/bin/activate
+python3 -m venv score-forge-venv
+source score-forge-venv/bin/activate
 pip install -r requirements.txt
 ```
 
