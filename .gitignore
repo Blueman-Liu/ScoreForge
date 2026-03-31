@@ -9,11 +9,13 @@
 # 忽略的文档文件
 DESCRIPTION.md
 IMPROVEMENT_PLAN.md
+PARALLELIZATION_PLAN.md
 
 # 忽略的目录
 old_version/
 output/
 piano-trans
+test_parallel*/
 
 # Python 缓存
 __pycache__/
