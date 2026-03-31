@@ -2,7 +2,7 @@
 
 ![ScoreForge - 钢琴音频转乐谱工具](images/readme-banner.png)
 
-将钢琴音频或 MIDI 文件转换为 PDF 乐谱的命令行工具。支持单个文件或批量转换。
+将钢琴音频或 MIDI 文件转换为 PDF 乐谱。支持命令行和网页界面两种使用方式。
 
 ## 功能特性
 
@@ -14,12 +14,40 @@
 - **灵活选项**：GPU 加速、输出目录、中间文件保留等
 - **并行处理**：批量处理时自动并行化，支持自定义工作进程数
 - **用户友好**：清晰的进度提示和错误处理
+- **网页界面**：基于 Streamlit 的现代化 Web UI，支持拖拽上传和一键下载
+
+## 使用方式
+
+### 方式一：网页界面（推荐）
+
+提供直观的 Web 界面，无需命令行操作：
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+浏览器会自动打开，支持：
+- 拖拽或点击上传多个文件
+- 实时进度显示
+- 一键下载 PDF 和 MIDI 文件
+- 可视化配置选项
+
+### 方式二：命令行工具
+
+适合批量处理和自动化场景：
+
+```bash
+python3 scoreforge.py input.wav
+python3 scoreforge.py /path/to/music_folder/
+```
 
 ## 系统要求
 
 - Python 3.6+
 - MuseScore 3（乐谱渲染引擎）
 - piano_transcription_inference（音频转 MIDI）
+- Streamlit（网页界面，可选）
 
 ## 安装
 
@@ -40,11 +68,6 @@ brew install musescore
 
 ### 2. 安装 Python 依赖
 
-```bash
-pip install piano_transcription_inference
-```
-
-或者使用提供的 requirements 文件：
 ```bash
 pip install -r requirements.txt
 ```
@@ -115,6 +138,7 @@ python3 scoreforge.py existing.mid --pdf-only
 ### Python 包依赖
 - `piano_transcription_inference`：钢琴转谱 AI 模型
 - `torch`（通过 piano_transcription_inference 自动安装）
+- `streamlit`：网页界面框架
 
 ### 系统依赖
 - `musescore3`：乐谱渲染和 PDF 生成

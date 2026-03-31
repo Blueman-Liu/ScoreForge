@@ -1,1 +1,2 @@
 piano_transcription_inference>=0.0.3
+streamlit>=1.28.0
