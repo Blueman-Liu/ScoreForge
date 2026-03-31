@@ -1,0 +1,43 @@
+# ScoreForge Git Ignore
+
+# 保留的文件（不忽略）：
+# - scoreforge.py
+# - README.md
+# - requirements.txt
+# - LICENSE
+
+# 忽略的文档文件
+DESCRIPTION.md
+IMPROVEMENT_PLAN.md
+
+# 忽略的目录
+old_version/
+output/
+piano-trans/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境
+venv/
+env/
+.env
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 构建产物
+dist/
+build/
+*.egg-info/
+*.egg
