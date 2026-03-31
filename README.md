@@ -1,13 +1,13 @@
 # ScoreForge
 
-将钢琴 MP3 或 MIDI 文件转换为 PDF 乐谱的命令行工具。支持单个文件或批量转换。
+将钢琴音频或 MIDI 文件转换为 PDF 乐谱的命令行工具。支持单个文件或批量转换。
 
 ## 功能特性
 
-- **多格式输入**：支持 `.mp3`、`.mid`、`.midi` 文件
+- **多格式输入**：支持 `.mp3`、`.wav`、`.flac`、`.ogg`、`.aac`、`.m4a`、`.wma`、`.mid`、`.midi` 文件
 - **批量处理**：可处理整个目录内的所有支持文件
 - **智能转换**：
-  - MP3 → MIDI → PDF（通过 AI 转谱）
+  - 音频 → MIDI → PDF（通过 AI 转谱）
   - MIDI → PDF（直接转换）
 - **灵活选项**：GPU 加速、输出目录、中间文件保留等
 - **用户友好**：清晰的进度提示和错误处理
@@ -16,7 +16,7 @@
 
 - Python 3.6+
 - MuseScore 3（乐谱渲染引擎）
-- piano_transcription_inference（MP3 转 MIDI）
+- piano_transcription_inference（音频转 MIDI）
 
 ## 安装
 
@@ -54,8 +54,8 @@ pip install -r requirements.txt
 # 查看帮助
 python3 scoreforge.py --help
 
-# 单个 MP3 文件转换为 PDF
-python3 scoreforge.py input.mp3
+# 单个音频文件转换为 PDF（支持 .mp3, .wav, .flac, .ogg 等）
+python3 scoreforge.py input.wav
 
 # 单个 MIDI 文件转换为 PDF
 python3 scoreforge.py input.mid
@@ -68,19 +68,19 @@ python3 scoreforge.py /path/to/music_folder/
 
 ```bash
 # 指定输出目录
-python3 scoreforge.py input.mp3 -o ./output_pdfs/
+python3 scoreforge.py input.wav -o ./output_pdfs/
 
 # 使用 GPU 加速（需要 CUDA）
-python3 scoreforge.py input.mp3 --use-gpu
+python3 scoreforge.py input.wav --use-gpu
 
 # 只生成 MIDI 文件（不转 PDF）
-python3 scoreforge.py input.mp3 --midi-only
+python3 scoreforge.py input.wav --midi-only
 
 # 假设输入是 MIDI，直接转 PDF（跳过格式检查）
 python3 scoreforge.py input.mid --pdf-only
 
 # 转换后删除中间生成的 MIDI 文件
-python3 scoreforge.py input.mp3 --no-keep-midi
+python3 scoreforge.py input.wav --no-keep-midi
 
 # 自定义 MuseScore 路径
 python3 scoreforge.py input.mid --musescore-path /usr/bin/musescore3
@@ -89,14 +89,14 @@ python3 scoreforge.py input.mid --musescore-path /usr/bin/musescore3
 ## 示例
 
 ```bash
-# 转换单个钢琴 MP3 文件
-python3 scoreforge.py "月光奏鸣曲.mp3"
+# 转换单个钢琴音频文件（支持 .mp3, .wav, .flac, .ogg 等）
+python3 scoreforge.py "月光奏鸣曲.wav"
 
 # 批量转换整个文件夹，输出到指定目录
 python3 scoreforge.py ./钢琴曲/ -o ./乐谱/
 
 # 仅生成 MIDI 文件（用于进一步编辑）
-python3 scoreforge.py recording.mp3 --midi-only
+python3 scoreforge.py recording.wav --midi-only
 
 # 使用现有 MIDI 文件生成 PDF
 python3 scoreforge.py existing.mid --pdf-only
@@ -114,7 +114,7 @@ python3 scoreforge.py existing.mid --pdf-only
 ## 工作流程
 
 ```
-MP3 输入
+音频输入（MP3, WAV, FLAC, OGG 等）
     ↓
 piano_transcription_inference（AI 转谱）
     ↓
@@ -136,7 +136,7 @@ A: 运行 `pip install piano_transcription_inference`
 A: 确保 MuseScore 已安装且命令行可用，或使用 `--musescore-path` 指定路径
 
 **Q: 转换速度慢**
-A: MP3 转 MIDI 是 CPU 密集型操作，可使用 `--use-gpu` 加速（需要 CUDA）
+A: 音频转 MIDI 是 CPU 密集型操作，可使用 `--use-gpu` 加速（需要 CUDA）
 
 **Q: 生成的 PDF 质量不佳**
 A: 转谱质量取决于音频清晰度和复杂度，简单钢琴曲效果更好

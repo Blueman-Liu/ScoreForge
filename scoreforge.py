@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Piano MP3/MIDI to PDF Converter
-合并了 piano_transcription_inference (MP3->MIDI) 和 MuseScore (MIDI->PDF) 的功能。
+ScoreForge: 钢琴音频/MIDI 转 PDF 乐谱
+合并了 piano_transcription_inference (音频->MIDI) 和 MuseScore (MIDI->PDF) 的功能。
+支持多种音频格式（MP3, WAV, FLAC, OGG 等）和 MIDI 文件。
 支持单个文件或批量转换。
 """
 
@@ -22,6 +23,8 @@ except ImportError:
     PianoTranscription = None
     load_audio = None
     sample_rate = None
+
+SUPPORTED_AUDIO_EXTS = ['.mp3', '.wav', '.flac', '.ogg', '.aac', '.m4a', '.wma']
 
 def check_musescore(musescore_path: str) -> bool:
     try:
@@ -105,9 +108,9 @@ def process_single_file(input_file: str,
         success = convert_midi_to_pdf(input_file, pdf_path, musescore_path)
         return success, pdf_path if success else None
 
-    if ext == '.mp3':
+    if ext in SUPPORTED_AUDIO_EXTS:
         midi_path = get_output_path(input_file, output_dir, '.mid')
-        print(f"步骤 1/2: MP3 转 MIDI")
+        print(f"步骤 1/2: 音频转 MIDI")
         success_midi = convert_mp3_to_midi(input_file, midi_path, use_gpu)
         if not success_midi:
             return False, None
@@ -142,7 +145,7 @@ def batch_process(input_path: str,
     input_path = os.path.abspath(input_path)
 
     if os.path.isdir(input_path):
-        supported_exts = ['.mp3', '.mid', '.midi']
+        supported_exts = SUPPORTED_AUDIO_EXTS + ['.mid', '.midi']
         files_to_process: List[str] = []
         for root, _, files in os.walk(input_path):
             for file in files:
@@ -188,16 +191,16 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  %(prog)s input.mp3                     # 单个 MP3 文件 -> MIDI + PDF
+  %(prog)s input.wav                     # 单个音频文件 -> MIDI + PDF（支持 .mp3, .wav, .flac, .ogg 等）
   %(prog)s input.mid                     # 单个 MIDI 文件 -> PDF
-  %(prog)s my_music_folder/              # 批量处理文件夹内所有 MP3/MIDI
-  %(prog)s input.mp3 -o output_dir/      # 指定输出目录
-  %(prog)s input.mp3 --midi-only         # 只生成 MIDI，不生成 PDF
+  %(prog)s my_music_folder/              # 批量处理文件夹内所有音频/MIDI
+  %(prog)s input.flac -o output_dir/     # 指定输出目录
+  %(prog)s input.ogg --midi-only         # 只生成 MIDI，不生成 PDF
   %(prog)s input.mid --pdf-only          # 假设输入是 MIDI，直接转 PDF（跳过格式检查）
         """
     )
 
-    parser.add_argument("input", help="输入文件或目录路径（支持 .mp3, .mid, .midi）")
+    parser.add_argument("input", help=f"输入文件或目录路径（支持 {', '.join(SUPPORTED_AUDIO_EXTS + ['.mid', '.midi'])}）")
     parser.add_argument("-o", "--output", default=".",
                         help="输出目录（默认为当前目录）")
     parser.add_argument("--musescore-path", default="musescore3",
