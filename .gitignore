@@ -13,7 +13,7 @@ IMPROVEMENT_PLAN.md
 # 忽略的目录
 old_version/
 output/
-piano-trans/
+piano-trans
 
 # Python 缓存
 __pycache__/
